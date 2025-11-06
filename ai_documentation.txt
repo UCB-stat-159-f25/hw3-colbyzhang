@@ -1,0 +1,1 @@
+Utilized AI companion in order to review concepts from lectures (e.g. Makefile, MyST, Installable Package).
