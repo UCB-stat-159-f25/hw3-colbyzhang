@@ -1,0 +1,33 @@
+[build-system]
+requires = [
+  "setuptools>=68",
+  "wheel",
+  "numpy"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ligotools"
+version = "0.1.0"
+description = "LIGO Gravitational Wave tutorial package for STAT 159/259 HW3"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+  { name = "Ligo Scientific Collaboration (LSC)" },
+  { name = "Colby Zhang" }
+]
+dependencies = [
+  "numpy",
+  "scipy",
+  "matplotlib",
+  "h5py"
+]
+
+[project.urls]
+Homepage = "https://github.com/colbyzhang/hw3-colbyzhang"
+
+[tool.setuptools]
+packages = ["ligotools"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
