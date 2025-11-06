@@ -2,82 +2,117 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import wavfile
 from scipy.interpolate import interp1d
-from matplotlib import mlab 
+from matplotlib import mlab
 
+# function to whiten data
 def whiten(strain, interp_psd, dt):
-    """
-    Whiten a strain time series using an interpolated one-sided PSD.
-    Parameters
-    ----------
-    strain : 1D array
-    interp_psd : callable
-        Function f(freq) -> PSD(freq). e.g., scipy.interpolate.interp1d
-    dt : float
-        Sample spacing (seconds), e.g. 1/fs
-    """
     Nt = len(strain)
     freqs = np.fft.rfftfreq(Nt, dt)
+    freqs1 = np.linspace(0, 2048, Nt // 2 + 1)
+
+    # whitening: transform to freq domain, divide by asd, then transform back, 
+    # taking care to get normalization right.
     hf = np.fft.rfft(strain)
-    white_hf = hf / np.sqrt(interp_psd(freqs) / 2.0)
+    norm = 1./np.sqrt(1./(dt*2))
+    white_hf = hf / np.sqrt(interp_psd(freqs)) * norm
     white_ht = np.fft.irfft(white_hf, n=Nt)
     return white_ht
 
-def write_wavfile(filename, fs, data):
-    """
-    Write scaled audio to WAV (int16). Safe when max(abs(data)) == 0.
-    """
-    peak = float(np.max(np.abs(data))) or 1.0
-    d = np.int16((data / peak) * 32767 * 0.9)
-    wavfile.write(filename, int(fs), d)
+# function to keep the data within integer limits, and write to wavfile:
+def write_wavfile(filename,fs,data):
+    d = np.int16(data/np.max(np.abs(data)) * 32767 * 0.9)
+    wavfile.write(filename,int(fs), d)
 
-def reqshift(data, fshift=100.0, sample_rate=4096.0):
-    """
-    Frequency-shift a band-passed signal by fshift (Hz) using FFT roll.
+# function that shifts frequency of a band-passed signal
+def reqshift(data,fshift=100,sample_rate=4096):
+    """Frequency shift the signal by constant
     """
     x = np.fft.rfft(data)
-    T = len(data) / float(sample_rate)
-    df = 1.0 / T
-    nbins = int(np.round(fshift / df))
-    y = np.roll(x, nbins)
-    y[:nbins] = 0
-    z = np.fft.irfft(y, n=len(data))
+    T = len(data)/float(sample_rate)
+    df = 1.0/T
+    nbins = int(fshift/df)
+    # print T,df,nbins,x.real.shape
+    y = np.roll(x.real,nbins) + 1j*np.roll(x.imag,nbins)
+    y[0:nbins]=0.
+    z = np.fft.irfft(y)
     return z
 
-def plot_asds_with_model(strain_H1, strain_L1, fs, eventname, plottype="png",
-                         f_min=20.0, f_max=2000.0, outdir="figures"):
+def plot_match_results(
+    time, timemax, SNR, det, eventname, plottype,
+    strain_whitenbp, template_match,
+    datafreq, template_fft, d_eff,
+    freqs, data_psd
+):
     """
-    Recreates the 'ASD with model' plot from the tutorial cell that begins with
-    '# -- To calculate the PSD of the data, choose an overlap and a window...'.
-    Saves to figures/{eventname}_ASDs.{plottype}.
+    Recreates the three plots from the matched-filter cell:
+      1) SNR(t) (full + zoom)
+      2) whitened data vs template + residuals (zoomed)
+      3) ASD + template in frequency
 
-    Returns
-    -------
-    freqs : 1D array of frequencies
-    psd_H1, psd_L1 : one-sided PSDs for H1/L1 (from mlab.psd)
-    psd_smooth : callable interpolant for the smooth model (interp1d)
+    Saves:
+      figures/{eventname}_{det}_SNR.{plottype}
+      figures/{eventname}_{det}_matchtime.{plottype}
+      figures/{eventname}_{det}_matchfreq.{plottype}
     """
-    NFFT = int(4 * fs)
-    Pxx_H1, freqs = mlab.psd(strain_H1, Fs=fs, NFFT=NFFT)
-    Pxx_L1, _     = mlab.psd(strain_L1, Fs=fs, NFFT=NFFT)
+    # pick color and labels by detector
+    pcolor = 'g' if det == 'L1' else 'r'
 
-    Pxx_model = (1.0e-22 * (18.0 / (0.1 + freqs))**2
-                 + 0.7e-23 * 2
-                 + ((freqs / 2000.0) * 4.0e-23)**2)
-    Pxx_model = Pxx_model**2  # convert amplitude-like expression to PSD
-    psd_smooth = interp1d(freqs, Pxx_model, bounds_error=False, fill_value=np.inf)
-
-    # Plot ASDs
+    # 1) SNR(t): full + zoom
     plt.figure(figsize=(10, 8))
-    plt.loglog(freqs, np.sqrt(Pxx_L1), 'g', label='L1 strain')
-    plt.loglog(freqs, np.sqrt(Pxx_H1), 'r', label='H1 strain')
-    plt.loglog(freqs, np.sqrt(Pxx_model), 'k', label='H1 strain, O1 smooth model')
-    plt.axis([f_min, f_max, 1e-24, 1e-19])
-    plt.grid(True, which="both", ls="-", alpha=0.3)
-    plt.ylabel('ASD (strain/rtHz)')
-    plt.xlabel('Freq (Hz)')
-    plt.legend(loc='upper center')
-    plt.title(f'Advanced LIGO strain data near {eventname}')
-    out = f"{outdir}/{eventname}_ASDs.{plottype}"
-    plt.savefig(out, bbox_inches="tight")
+    plt.subplot(2, 1, 1)
+    plt.plot(time - timemax, SNR, pcolor, label=f"{det} SNR(t)")
+    plt.grid(True)
+    plt.ylabel("SNR")
+    plt.xlabel(f"Time since {timemax:.4f}")
+    plt.legend(loc="upper left")
+    plt.title(f"{det} matched filter SNR around event")
+
+    plt.subplot(2, 1, 2)
+    plt.plot(time - timemax, SNR, pcolor, label=f"{det} SNR(t)")
+    plt.grid(True)
+    plt.ylabel("SNR")
+    plt.xlim([-0.15, 0.05])
+    plt.xlabel(f"Time since {timemax:.4f}")
+    plt.legend(loc="upper left")
+    plt.savefig(f"figures/{eventname}_{det}_SNR.{plottype}", bbox_inches="tight")
     plt.close()
-    return freqs, Pxx_H1, Pxx_L1, psd_smooth
+
+    # 2) whitened data vs template + residuals
+    plt.figure(figsize=(10, 8))
+    plt.subplot(2, 1, 1)
+    plt.plot(time, strain_whitenbp, pcolor, label=f"{det} whitened h(t)")
+    plt.plot(time, template_match, "k", label="Template(t)")
+    plt.ylim([-10, 10])
+    plt.xlim([time.min(), time.min() + 0.20])  # ~[-0.15, +0.05] relative zoom
+    plt.grid(True)
+    plt.xlabel(f"Time (s)")
+    plt.ylabel("whitened strain (noise stdev units)")
+    plt.legend(loc="upper left")
+    plt.title(f"{det} whitened data around event")
+
+    plt.subplot(2, 1, 2)
+    plt.plot(time, strain_whitenbp - template_match, pcolor, label=f"{det} resid")
+    plt.ylim([-10, 10])
+    plt.xlim([time.min(), time.min() + 0.20])
+    plt.grid(True)
+    plt.xlabel("Time (s)")
+    plt.ylabel("whitened strain (noise stdev units)")
+    plt.legend(loc="upper left")
+    plt.title(f"{det} Residual whitened data after subtracting template")
+    plt.savefig(f"figures/{eventname}_{det}_matchtime.{plottype}", bbox_inches="tight")
+    plt.close()
+
+    # 3) ASD + template(f)*sqrt(f)
+    plt.figure(figsize=(10, 6))
+    template_f = np.abs(template_fft) * np.sqrt(np.abs(datafreq)) / d_eff
+    plt.loglog(datafreq, template_f, "k", label="template(f)*sqrt(f)")
+    plt.loglog(freqs, np.sqrt(data_psd), pcolor, label=f"{det} ASD")
+    plt.xlim(20, datafreq.max())
+    plt.ylim(1e-24, 1e-20)
+    plt.grid(True)
+    plt.xlabel("frequency (Hz)")
+    plt.ylabel("strain noise ASD (strain/rtHz), template h(f)*rt(f)")
+    plt.legend(loc="upper left")
+    plt.title(f"{det} ASD and template around event")
+    plt.savefig(f"figures/{eventname}_{det}_matchfreq.{plottype}", bbox_inches="tight")
+    plt.close()
