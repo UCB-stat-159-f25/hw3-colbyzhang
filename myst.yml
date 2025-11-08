@@ -9,5 +9,5 @@ project:
 
 
 toc:
-    - README.md
-    - LOSC_Event_tutorial.ipynb
+    - file: README.md
+    - file: LOSC_Event_tutorial.ipynb
