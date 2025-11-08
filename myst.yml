@@ -1,13 +1,21 @@
 # See docs at: https://mystmd.org/guide/frontmatter
 version: 1
+
 project:
   id: bd8a1574-a2ca-46e6-8b2b-ee3dc9af7d5a
   title: "Ligo Detection Project"
-  authors: ["Ligo Scentific Collaboration (LCS) and Colby Zhang"]
-  affiliation: "University of California, Berkeley
-  binder: https://hub.2i2c.mybinder.org/user/ucb-stat-159-f25-hw3-colbyzhang-snw1hmtw/doc/tree/LOSC_Event_tutorial.ipynb
+  authors: 
+      - "Ligo Scentific Collaboration (LCS)" 
+      - "Colby Zhang"
+  affiliation: "University of California, Berkeley"
+  github: "https://github.com/UCB-stat-159-f25/hw3-colbyzhang"
 
-
+site:
+  template: book-theme
+  
 toc:
     - file: README.md
+      title: "Home"
     - file: LOSC_Event_tutorial.ipynb
+      title: "Main Notebook"
+
